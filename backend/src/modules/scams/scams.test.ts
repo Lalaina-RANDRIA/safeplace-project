@@ -3,6 +3,7 @@ import { ScamContentService } from "./services/scam-content.service.ts";
 import { ScamIdentityService } from "./services/scam-identity.service.ts";
 import { ScamPatternService } from "./services/scam-pattern.service.ts";
 import { ScamScoringService } from "./services/scam-scoring.service.ts";
+import { ScamService } from "./services/scam.service.ts";
 import { InvalidScamUrlError, ScamUrlService } from "./services/scam-url.service.ts";
 import { parseHttpUrl } from "../../shared/utils/url.util.ts";
 
@@ -10,6 +11,7 @@ const contentService = new ScamContentService();
 const identityService = new ScamIdentityService();
 const patternService = new ScamPatternService();
 const scoringService = new ScamScoringService();
+const scamService = new ScamService();
 const urlService = new ScamUrlService();
 
 const normal = contentService.analyze("Bienvenue sur notre site.");
@@ -68,6 +70,51 @@ assert.ok(englishPrize.signals.some((signal) => signal.type === "SUSPICIOUS_LINK
 
 const institutional = identityService.analyze("Microsoft publie une alerte concernant les campagnes de phishing.", "https://example.com/alert");
 assert.ok(!institutional.signals.some((signal) => signal.type === "IMPERSONATION"));
+assert.ok(institutional.score <= 0.1);
+
+const paypalArticle = identityService.analyze("PayPal recommande aux utilisateurs de ne jamais communiquer leur mot de passe.", "https://news.example.com/article");
+assert.ok(!paypalArticle.signals.some((signal) => signal.type === "IMPERSONATION"));
+assert.ok(paypalArticle.score <= 0.1);
+
+const fakeMicrosoftSupport = identityService.analyze(
+  "Nous sommes Microsoft Support. Communiquez immédiatement votre code de connexion afin de sécuriser votre compte.",
+  "https://secure-example.com/login",
+);
+assert.ok(fakeMicrosoftSupport.signals.some((signal) => signal.type === "IMPERSONATION"));
+assert.ok(fakeMicrosoftSupport.score > institutional.score);
+
+const fakePaypalSupport = identityService.analyze(
+  "PayPal Support : veuillez confirmer votre mot de passe pour éviter la suspension de votre compte.",
+  "https://paypal-security-example.com/login",
+);
+assert.ok(fakePaypalSupport.signals.some((signal) => signal.type === "IMPERSONATION"));
+assert.ok(fakePaypalSupport.score > paypalArticle.score);
+
+const officialMicrosoft = identityService.analyze(
+  "Microsoft Support vous aide à récupérer votre compte.",
+  "https://support.microsoft.com/",
+);
+assert.equal(officialMicrosoft.score, 0);
+assert.equal(officialMicrosoft.signals.length, 0);
+
+const officialMicrosoftSubdomain = identityService.analyze(
+  "Votre compte Microsoft nécessite une vérification.",
+  "https://login.microsoft.com/",
+);
+assert.equal(officialMicrosoftSubdomain.score, 0);
+assert.equal(officialMicrosoftSubdomain.signals.length, 0);
+
+const brandComparison = identityService.analyze(
+  "Cet article compare Microsoft, Google et Apple.",
+  "https://example.com/article",
+);
+assert.equal(brandComparison.score, 0);
+
+const educationalBrandPassword = identityService.analyze(
+  "Cet article explique pourquoi Microsoft recommande de ne jamais partager son mot de passe.",
+  "https://example.com/security",
+);
+assert.equal(educationalBrandPassword.score, 0);
 
 const ipUrl = urlService.analyze("http://192.168.1.20/login");
 assert.ok(ipUrl.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
@@ -174,11 +221,105 @@ const withReputation = scoringService.calculate({
 });
 assert.equal(withReputation.score, 0.67);
 
+const urlOnly = scoringService.calculate({
+  urlScore: 0.9,
+  contentScore: 0,
+  identityScore: 0,
+});
+assert.ok(urlOnly.score < 0.65);
+assert.notEqual(urlOnly.verdict, "CRITICAL_RISK");
+
+const contentAndIdentity = scoringService.calculate({
+  urlScore: 0,
+  contentScore: 0.8,
+  identityScore: 0.8,
+});
+assert.ok(contentAndIdentity.score > contentOnly.score);
+
+const multipleHighScores = scoringService.calculate({
+  urlScore: 0.9,
+  contentScore: 0.9,
+  identityScore: 0.9,
+});
+assert.ok(["HIGH_RISK", "CRITICAL_RISK"].includes(multipleHighScores.verdict));
+
 const signals = patternService.detect("Envoyez immédiatement 500 Ar.");
 assert.ok(signals.every((signal) => signal.score >= 0 && signal.score <= 1));
 assert.ok(signals.every((signal) => signal.confidence >= 0 && signal.confidence <= 1));
 assert.ok(signals.every((signal) => signal.description.length > 0));
 assert.ok(signals.every((signal) => signal.evidence !== undefined));
 assert.equal(new Set(signals.map((signal) => signal.type)).size, signals.length);
+
+const normalPage = scamService.analyze({
+  url: "https://example.com/",
+  title: "Bienvenue",
+  content: "Bienvenue sur notre site.",
+});
+assert.equal(normalPage.score, 0);
+assert.equal(normalPage.verdict, "UNKNOWN");
+assert.equal(normalPage.signals.length, 0);
+
+const paymentPage = scamService.analyze({
+  url: "https://example.com/payment",
+  content: "Envoyez immédiatement 500 000 Ar pour confirmer votre compte.",
+});
+assert.ok(paymentPage.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
+assert.ok(paymentPage.signals.some((signal) => signal.type === "URGENCY"));
+assert.ok(paymentPage.score > normalPage.score);
+
+const threatCredentialsPage = scamService.analyze({
+  url: "https://example.com/login",
+  content: "Votre compte sera bloqué. Communiquez immédiatement votre code OTP.",
+});
+assert.ok(threatCredentialsPage.signals.some((signal) => signal.type === "THREAT"));
+assert.ok(threatCredentialsPage.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
+assert.ok(threatCredentialsPage.signals.some((signal) => signal.type === "URGENCY"));
+
+const prizePage = scamService.analyze({
+  url: "https://example.com/prize",
+  content: "Félicitations ! Vous avez gagné 5 000 000 Ar. Cliquez ici pour réclamer votre prix.",
+});
+assert.ok(prizePage.signals.some((signal) => signal.type === "PRIZE"));
+assert.ok(prizePage.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
+
+const fakeSupportPage = scamService.analyze({
+  url: "https://example.com/support",
+  content: "Appelez immédiatement notre support et communiquez votre mot de passe.",
+});
+assert.ok(fakeSupportPage.signals.some((signal) => signal.type === "FAKE_SUPPORT"));
+assert.ok(fakeSupportPage.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
+
+const technicalUrlWithLegitimateContent = scamService.analyze({
+  url: "http://192.168.1.20/login",
+  content: "Bienvenue sur le portail interne.",
+});
+assert.ok(technicalUrlWithLegitimateContent.urlScore > 0);
+assert.equal(technicalUrlWithLegitimateContent.contentScore, 0);
+
+const stableInput = {
+  url: "https://example.com/payment",
+  title: "Payment",
+  content: "Send the payment immediately to confirm your account.",
+};
+const stableFirst = scamService.analyze(stableInput);
+const stableSecond = scamService.analyze(stableInput);
+assert.deepEqual(
+  {
+    score: stableFirst.score,
+    verdict: stableFirst.verdict,
+    urlScore: stableFirst.urlScore,
+    contentScore: stableFirst.contentScore,
+    identityScore: stableFirst.identityScore,
+    signals: stableFirst.signals,
+  },
+  {
+    score: stableSecond.score,
+    verdict: stableSecond.verdict,
+    urlScore: stableSecond.urlScore,
+    contentScore: stableSecond.contentScore,
+    identityScore: stableSecond.identityScore,
+    signals: stableSecond.signals,
+  },
+);
 
 console.log("Scam module tests passed.");

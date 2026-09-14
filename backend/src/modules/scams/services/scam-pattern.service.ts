@@ -13,8 +13,8 @@ const patterns: PatternRule[] = [
   {
     type: "URGENCY",
     expressions: [
-      /\b(?:urgent|immediately|immédiatement|maintenant|now|d'urgence)\b.{0,60}\b(?:agir|act|click|cliquez|appelez|call|envoyez|send|confirmez|confirm)\b/i,
-      /\b(?:agir|act|click|cliquez|appelez|call|envoyez|send|confirmez|confirm)\b.{0,60}\b(?:urgent|immediately|immédiatement|maintenant|now|d'urgence)\b/i,
+      /\b(?:urgent|immediately|immédiatement|maintenant|now|d'urgence)\b.{0,60}\b(?:agir|act|click|cliquez|appelez|call|envoyez|send|confirmez|confirm|communiquez|provide)\b/i,
+      /\b(?:agir|act|click|cliquez|appelez|call|envoyez|send|confirmez|confirm|communiquez|provide)\b.{0,60}\b(?:urgent|immediately|immédiatement|maintenant|now|d'urgence)\b/i,
       /\b(?:compte|account|service).{0,50}\b(?:bloqué|blocked|suspendu|suspended|fermé|closed)\b.{0,50}\b(?:si|if|unless|sans)\b/i,
     ],
     exclusions: [/\b(?:ne|n'|never|do not|don't)\b.{0,40}\b(?:agir|act|click|cliquez|appelez|call|envoyez|send|confirmez|confirm)\b/i],
