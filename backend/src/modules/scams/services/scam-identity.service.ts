@@ -1,92 +1,109 @@
 import type { ScamIdentityAnalysis, ScamSignal } from "../types/scam.ts";
 
 /**
- * Informations connues pour une marque.
- *
- * officialDomains :
- * domaines officiellement associés à la marque.
- *
- * aliases :
- * variantes textuelles pouvant représenter la marque.
+ * Informations connues concernant une marque ou une organisation.
  */
 interface KnownBrand {
+  /**
+   * Domaines officiellement associés à la marque.
+   */
   officialDomains: string[];
 
+  /**
+   * Alias pouvant désigner la marque dans le contenu.
+   */
   aliases: string[];
 }
 
 /**
  * Base minimale de marques connues.
  *
- * Cette liste doit rester limitée et facilement extensible.
+ * Cette liste doit rester petite, explicite et facilement
+ * extensible.
  *
  * IMPORTANT :
- * la présence d'une marque dans le texte ne signifie
- * pas automatiquement qu'il s'agit d'une usurpation.
+ * la simple présence d'une marque dans une page
+ * n'est jamais considérée comme une preuve d'usurpation.
  */
 const KNOWN_BRANDS: Record<string, KnownBrand> = {
   paypal: {
     officialDomains: ["paypal.com"],
 
-    aliases: ["paypal"],
+    aliases: ["paypal", "paypal support", "paypal account"],
   },
 
   microsoft: {
     officialDomains: ["microsoft.com", "live.com"],
 
-    aliases: ["microsoft", "microsoft support", "microsoft account"],
+    aliases: [
+      "microsoft",
+      "microsoft support",
+      "microsoft account",
+      "microsoft security",
+    ],
   },
 
   google: {
     officialDomains: ["google.com"],
 
-    aliases: ["google", "google support", "google account"],
+    aliases: ["google", "google support", "google account", "google security"],
   },
 
   banque: {
     officialDomains: [],
 
-    aliases: ["banque", "bank", "service bancaire"],
+    aliases: [
+      "banque",
+      "bank",
+      "service bancaire",
+      "service bancaire officiel",
+    ],
   },
 };
 
 /**
- * Termes indiquant généralement une demande
- * d'informations ou d'actions sensibles.
+ * Actions pouvant indiquer une demande sensible.
  *
- * Le service Identity les utilise uniquement comme
- * facteur contextuel.
+ * Elles sont utilisées uniquement comme contexte.
  */
 const SENSITIVE_ACTION_PATTERNS: RegExp[] = [
-  /\b(?:communiquez|envoyez|saisissez|entrez|confirmez|fournissez|partagez)\b.{0,60}\b(?:mot de passe|password|identifiants?|login|code otp|otp|code de connexion)\b/i,
+  /\b(?:communiquez|envoyez|saisissez|entrez|confirmez|fournissez|partagez|transmettez)\b.{0,60}\b(?:mot de passe|password|identifiants?|login|code otp|otp|code de connexion|code de securite)\b/i,
 
-  /\b(?:mot de passe|password|identifiants?|login|code otp|otp|code de connexion)\b.{0,60}\b(?:communiquez|envoyez|saisissez|entrez|confirmez|fournissez|partagez)\b/i,
+  /\b(?:mot de passe|password|identifiants?|login|code otp|otp|code de connexion|code de securite)\b.{0,60}\b(?:communiquez|envoyez|saisissez|entrez|confirmez|fournissez|partagez|transmettez)\b/i,
 
-  /\b(?:vérifiez|verify|confirm|confirmez)\b.{0,60}\b(?:compte|account|identité|identity)\b.{0,60}\b(?:mot de passe|password|code|otp)\b/i,
+  /\b(?:verifiez|verify|confirm|confirmez)\b.{0,60}\b(?:compte|account|identite|identity)\b.{0,60}\b(?:mot de passe|password|code|otp)\b/i,
 ];
 
 /**
- * Termes indiquant une revendication d'identité
- * plus forte qu'une simple mention informative.
+ * Formulations montrant qu'une page revendique
+ * explicitement l'identité d'une organisation.
  */
 const IDENTITY_CLAIM_PATTERNS: RegExp[] = [
-  /\b(?:service client|support|assistance|équipe)\b.{0,60}\b(?:paypal|microsoft|google|banque|bank)\b/i,
+  /\b(?:nous sommes|nous representons|nous faisons partie de|we are|we represent|official support|support officiel|compte officiel|official account)\b.{0,60}\b(?:paypal|microsoft|google|banque|bank)\b/i,
 
-  /\b(?:paypal|microsoft|google|banque|bank)\b.{0,60}\b(?:service client|support|assistance|équipe)\b/i,
+  /\b(?:paypal|microsoft|google|banque|bank)\b.{0,60}\b(?:support officiel|official support|service client|support|assistance|equipe|team)\b/i,
 
-  /\b(?:nous sommes|nous représentons|support officiel|official support|official account)\b.{0,60}\b(?:paypal|microsoft|google|banque|bank)\b/i,
-
-  /\b(?:votre compte|your account)\b.{0,60}\b(?:paypal|microsoft|google|banque|bank)\b/i,
+  /\b(?:service client|support|assistance|equipe|team)\b.{0,60}\b(?:paypal|microsoft|google|banque|bank)\b/i,
 ];
 
 /**
- * Normalise un texte avant comparaison.
+ * Formulations indiquant généralement une tentative
+ * de récupération ou de vérification d'un compte.
+ */
+const ACCOUNT_ACTION_PATTERNS: RegExp[] = [
+  /\b(?:verifiez|verify|confirmez|confirm|validez|validate|securisez|secure)\b.{0,60}\b(?:votre compte|your account|votre identite|your identity)\b/i,
+
+  /\b(?:votre compte|your account)\b.{0,60}\b(?:sera|will be|va etre|is going to be)\b.{0,60}\b(?:bloque|suspendu|locked|suspended|closed)\b/i,
+];
+
+/**
+ * Normalise un texte.
  */
 function normalizeText(value: string): string {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -97,21 +114,41 @@ function normalizeText(value: string): string {
 function normalizeHostname(hostname: string): string {
   return hostname
     .trim()
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replace(/^\.+|\.+$/g, "");
 }
 
 /**
- * Vérifie si un hostname appartient à un domaine officiel.
+ * Récupère le hostname d'une URL HTTP/HTTPS.
  *
- * Exemple :
+ * Une URL invalide n'est pas transformée en signal Scam.
+ */
+function getHostnameFromUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return null;
+    }
+
+    return normalizeHostname(parsedUrl.hostname);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Détermine si un hostname appartient exactement
+ * à un domaine officiel ou à l'un de ses sous-domaines.
  *
- * paypal.com
- * login.paypal.com
+ * Exemples acceptés pour microsoft.com :
  *
- * sont acceptés pour :
+ * microsoft.com
+ * login.microsoft.com
  *
- * paypal.com
+ * Exemple refusé :
+ *
+ * microsoft.com.example.org
  */
 function isOfficialDomain(
   hostname: string,
@@ -135,8 +172,7 @@ function isOfficialDomain(
 }
 
 /**
- * Retourne le premier alias correspondant
- * au contenu.
+ * Recherche un alias de marque dans le contenu.
  */
 function findBrandAlias(
   normalizedContent: string,
@@ -154,8 +190,7 @@ function findBrandAlias(
 }
 
 /**
- * Vérifie si une demande sensible existe
- * dans le contenu.
+ * Vérifie la présence d'une demande sensible.
  */
 function containsSensitiveAction(normalizedContent: string): boolean {
   for (const pattern of SENSITIVE_ACTION_PATTERNS) {
@@ -168,7 +203,7 @@ function containsSensitiveAction(normalizedContent: string): boolean {
 }
 
 /**
- * Vérifie si le contenu revendique explicitement
+ * Vérifie si la page revendique explicitement
  * une identité ou un rôle de support.
  */
 function containsIdentityClaim(normalizedContent: string): boolean {
@@ -182,21 +217,17 @@ function containsIdentityClaim(normalizedContent: string): boolean {
 }
 
 /**
- * Vérifie si le hostname semble être un sous-domaine
- * ou un domaine officiel reconnu.
+ * Vérifie si le contenu contient une action
+ * de vérification/récupération de compte.
  */
-function getHostnameFromUrl(url: string): string | null {
-  try {
-    const parsedUrl = new URL(url);
-
-    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return null;
+function containsAccountAction(normalizedContent: string): boolean {
+  for (const pattern of ACCOUNT_ACTION_PATTERNS) {
+    if (pattern.test(normalizedContent)) {
+      return true;
     }
-
-    return normalizeHostname(parsedUrl.hostname);
-  } catch {
-    return null;
   }
+
+  return false;
 }
 
 /**
@@ -208,6 +239,7 @@ function createImpersonationSignal(
   evidence: string,
   score: number,
   confidence: number,
+  reason: string,
 ): ScamSignal {
   return {
     type: "IMPERSONATION",
@@ -217,31 +249,37 @@ function createImpersonationSignal(
     confidence,
 
     description:
-      `Le contenu semble revendiquer l'identité de ${brandName}, ` +
-      `mais le domaine "${hostname}" ne correspond pas à un domaine officiel connu.`,
+      `La page semble revendiquer l'identité de ${brandName}, ` +
+      `mais le domaine "${hostname}" ne correspond pas à un domaine officiel connu. ` +
+      reason,
 
     evidence,
   };
 }
 
 /**
- * Service responsable de l'analyse d'identité.
+ * Analyse du risque d'identité.
  *
- * Son rôle est de rechercher une éventuelle incohérence
- * entre :
+ * Principe :
  *
- * - l'identité revendiquée dans le contenu ;
- * - le domaine réellement utilisé.
+ * marque seule
+ * → aucun signal
  *
- * Il ne décide jamais seul qu'une page est une arnaque.
+ * marque + revendication d'identité
+ * → signal modéré
+ *
+ * marque + revendication + action sensible
+ * → signal plus fort
+ *
+ * marque + domaine officiel
+ * → aucun signal d'usurpation
  */
 export class ScamIdentityService {
   analyze(content: string, url: string): ScamIdentityAnalysis {
     const normalizedContent = normalizeText(content);
 
     /**
-     * Contenu vide :
-     * aucune identité ne peut être analysée.
+     * Aucun contenu à analyser.
      */
     if (normalizedContent.length === 0) {
       return {
@@ -251,13 +289,13 @@ export class ScamIdentityService {
     }
 
     /**
-     * Récupération du hostname.
+     * Extraction du hostname.
      */
     const hostname = getHostnameFromUrl(url);
 
     /**
-     * Si l'URL n'est pas analysable ici,
-     * on ne transforme pas l'erreur en signal Scam.
+     * URL non analysable :
+     * aucune conclusion d'usurpation.
      */
     if (!hostname) {
       return {
@@ -269,79 +307,108 @@ export class ScamIdentityService {
     const signals: ScamSignal[] = [];
 
     /**
-     * Analyse de chaque marque connue.
+     * Détection du contexte global.
+     *
+     * Ces valeurs sont calculées une seule fois.
+     */
+    const sensitiveAction = containsSensitiveAction(normalizedContent);
+
+    const identityClaim = containsIdentityClaim(normalizedContent);
+
+    const accountAction = containsAccountAction(normalizedContent);
+
+    /**
+     * Analyse des marques connues.
      */
     for (const [brandName, brand] of Object.entries(KNOWN_BRANDS)) {
       const alias = findBrandAlias(normalizedContent, brand);
 
       /**
-       * La marque n'est pas mentionnée.
+       * Pas de mention de cette marque.
        */
       if (!alias) {
         continue;
       }
 
       /**
-       * La marque possède un domaine officiel
-       * et le domaine actuel correspond :
-       *
-       * => aucune usurpation.
+       * Domaine officiel :
+       * la mention de la marque est cohérente
+       * avec le domaine.
        */
-      const official = isOfficialDomain(hostname, brand.officialDomains);
-
-      if (official) {
+      if (isOfficialDomain(hostname, brand.officialDomains)) {
         continue;
       }
 
       /**
-       * Vérifie le contexte.
-       *
-       * Une simple mention d'une marque dans
-       * un article ne doit pas déclencher
-       * un signal d'usurpation.
+       * Une marque dans un article informatif
+       * ne suffit pas à déclencher une usurpation.
        */
-      const sensitiveAction = containsSensitiveAction(normalizedContent);
-
-      const identityClaim = containsIdentityClaim(normalizedContent);
-
-      /**
-       * Nous voulons une convergence de signaux.
-       *
-       * Marque seule :
-       * aucun signal.
-       *
-       * Marque + revendication :
-       * risque modéré.
-       *
-       * Marque + revendication + action sensible :
-       * risque plus élevé.
-       */
-      if (!identityClaim && !sensitiveAction) {
+      if (!identityClaim && !sensitiveAction && !accountAction) {
         continue;
       }
 
-      let score = 0.55;
+      /**
+       * Score de base.
+       *
+       * La simple discordance marque/domaine
+       * ne donne qu'un signal modéré.
+       */
+      let score = 0.45;
 
-      let confidence = 0.6;
+      let confidence = 0.55;
 
+      /**
+       * Revendication explicite d'identité.
+       */
       if (identityClaim) {
-        score += 0.1;
-
-        confidence += 0.05;
-      }
-
-      if (sensitiveAction) {
-        score += 0.1;
+        score += 0.15;
 
         confidence += 0.1;
       }
 
       /**
-       * Protection des bornes.
+       * Demande d'informations sensibles.
+       */
+      if (sensitiveAction) {
+        score += 0.15;
+
+        confidence += 0.1;
+      }
+
+      /**
+       * Action de récupération/vérification
+       * d'un compte.
+       */
+      if (accountAction) {
+        score += 0.1;
+
+        confidence += 0.05;
+      }
+
+      /**
+       * Limitation des bornes.
        */
       score = Math.min(1, score);
 
       confidence = Math.min(1, confidence);
+
+      const reasons: string[] = [];
+
+      if (identityClaim) {
+        reasons.push("Une revendication explicite d'identité a été détectée.");
+      }
+
+      if (sensitiveAction) {
+        reasons.push(
+          "Une demande d'information ou d'action sensible a été détectée.",
+        );
+      }
+
+      if (accountAction) {
+        reasons.push(
+          "Une action de vérification ou de récupération de compte a été détectée.",
+        );
+      }
 
       const signal = createImpersonationSignal(
         brandName,
@@ -349,13 +416,14 @@ export class ScamIdentityService {
         alias,
         score,
         confidence,
+        reasons.join(" "),
       );
 
       signals.push(signal);
     }
 
     /**
-     * Si aucune incohérence d'identité n'a été détectée.
+     * Aucun signal d'usurpation.
      */
     if (signals.length === 0) {
       return {
@@ -365,12 +433,10 @@ export class ScamIdentityService {
     }
 
     /**
-     * Plusieurs marques peuvent éventuellement
-     * être détectées.
+     * Une page peut mentionner plusieurs marques.
      *
-     * Pour éviter un score supérieur à 1,
-     * on utilise le meilleur signal plutôt
-     * qu'une addition brute.
+     * On utilise le signal le plus fort au lieu
+     * d'additionner les marques.
      */
     const score = this.calculateScore(signals);
 
@@ -381,20 +447,19 @@ export class ScamIdentityService {
   }
 
   /**
-   * Calcule le score d'identité.
+   * Retourne le meilleur score d'identité.
    *
-   * On conserve le signal le plus fort
-   * afin d'éviter de faire exploser le score
-   * lorsqu'une page mentionne plusieurs marques.
+   * On prend score × confiance afin d'éviter
+   * qu'un signal peu fiable domine le résultat.
    */
   private calculateScore(signals: ScamSignal[]): number {
     let bestScore = 0;
 
     for (const signal of signals) {
-      const score = signal.score * signal.confidence;
+      const effectiveScore = signal.score * signal.confidence;
 
-      if (score > bestScore) {
-        bestScore = score;
+      if (effectiveScore > bestScore) {
+        bestScore = effectiveScore;
       }
     }
 
