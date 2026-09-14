@@ -22,13 +22,49 @@ assert.ok(payment.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
 assert.ok(payment.signals.some((signal) => signal.type === "URGENCY"));
 assert.ok(payment.score > normal.score);
 
+const educationalPayment = contentService.analyze("Cet article explique comment éviter les arnaques au paiement.");
+assert.ok(!educationalPayment.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
+assert.ok(!educationalPayment.signals.some((signal) => signal.type === "PAYMENT_REQUEST" && signal.score >= 0.8));
+
+const preventiveCredentials = contentService.analyze("Ne communiquez jamais votre mot de passe.");
+assert.ok(!preventiveCredentials.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
+
+const institutionalAlert = contentService.analyze("Microsoft publie une alerte contre le phishing.");
+assert.ok(!institutionalAlert.signals.some((signal) => signal.type === "IMPERSONATION"));
+
+const acceptedPayment = contentService.analyze("Les paiements par carte bancaire sont acceptés.");
+assert.ok(!acceptedPayment.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
+
+const educationalSupport = contentService.analyze("Cet article explique les dangers des faux supports.");
+assert.ok(!educationalSupport.signals.some((signal) => signal.type === "FAKE_SUPPORT"));
+
+const educationalLinks = contentService.analyze("Les liens raccourcis peuvent présenter un risque.");
+assert.ok(!educationalLinks.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
+
 const support = contentService.analyze("Votre compte sera fermé. Appelez immédiatement ce numéro et communiquez votre code.");
 assert.ok(support.signals.some((signal) => signal.type === "THREAT"));
 assert.ok(support.signals.some((signal) => signal.type === "URGENCY"));
 assert.ok(support.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
 
-const educational = contentService.analyze("Cet article explique comment reconnaître une arnaque au paiement.");
-assert.ok(!educational.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
+const prize = contentService.analyze("Félicitations ! Vous avez gagné 5 000 000 Ar. Cliquez ici pour réclamer votre prix.");
+assert.ok(prize.signals.some((signal) => signal.type === "PRIZE"));
+assert.ok(prize.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
+
+const fakeSupport = contentService.analyze("Appelez immédiatement notre support et communiquez votre mot de passe.");
+assert.ok(fakeSupport.signals.some((signal) => signal.type === "FAKE_SUPPORT"));
+assert.ok(fakeSupport.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
+assert.ok(fakeSupport.signals.some((signal) => signal.type === "URGENCY"));
+
+const englishPayment = contentService.analyze("Send the payment immediately to confirm your account.");
+assert.ok(englishPayment.signals.some((signal) => signal.type === "PAYMENT_REQUEST"));
+assert.ok(englishPayment.signals.some((signal) => signal.type === "URGENCY"));
+
+const englishCredentials = contentService.analyze("Enter your password to recover your account.");
+assert.ok(englishCredentials.signals.some((signal) => signal.type === "CREDENTIAL_REQUEST"));
+
+const englishPrize = contentService.analyze("You won a prize. Click here to claim it.");
+assert.ok(englishPrize.signals.some((signal) => signal.type === "PRIZE"));
+assert.ok(englishPrize.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
 
 const institutional = identityService.analyze("Microsoft publie une alerte concernant les campagnes de phishing.", "https://example.com/alert");
 assert.ok(!institutional.signals.some((signal) => signal.type === "IMPERSONATION"));
@@ -81,5 +117,8 @@ assert.equal(withReputation.score, 0.67);
 const signals = patternService.detect("Envoyez immédiatement 500 Ar.");
 assert.ok(signals.every((signal) => signal.score >= 0 && signal.score <= 1));
 assert.ok(signals.every((signal) => signal.confidence >= 0 && signal.confidence <= 1));
+assert.ok(signals.every((signal) => signal.description.length > 0));
+assert.ok(signals.every((signal) => signal.evidence !== undefined));
+assert.equal(new Set(signals.map((signal) => signal.type)).size, signals.length);
 
 console.log("Scam module tests passed.");
