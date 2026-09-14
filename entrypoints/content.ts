@@ -4,6 +4,7 @@ import type {
   ExtractedLink,
   StartExtractionMessage,
 } from "../types/extraction";
+import type { ExtractionErrorMessage } from "../types/extraction";
 
 const MIN_READABILITY_TEXT_LENGTH = 200;
 
@@ -119,16 +120,38 @@ function extractPage(): ExtractionPayload {
   };
 }
 
+function isStartExtractionMessage(message: unknown): message is StartExtractionMessage {
+  return typeof message === "object" && message !== null &&
+    (message as { type?: unknown }).type === "START_EXTRACTION";
+}
+
+function sendExtractionError(error: ExtractionErrorMessage): void {
+  void browser.runtime.sendMessage(error).catch((reason) => {
+    console.error("[SafePlace][Content] Failed to send extraction error.", reason);
+  });
+}
+
 export default defineContentScript({
   matches: ["<all_urls>"],
   main() {
-    browser.runtime.onMessage.addListener((message: StartExtractionMessage) => {
-      if (message.type !== "START_EXTRACTION") {
+    browser.runtime.onMessage.addListener((message: unknown) => {
+      if (!isStartExtractionMessage(message)) {
         return;
       }
 
-      const payload = extractPage();
-      void browser.runtime.sendMessage({ type: "EXTRACTION_RESULT", payload });
+      try {
+        const payload = extractPage();
+        void browser.runtime.sendMessage({ type: "EXTRACTION_RESULT", payload }).catch((reason) => {
+          console.error("[SafePlace][Content] Failed to send extraction result.", reason);
+        });
+      } catch (error) {
+        console.error("[SafePlace][Content] Extraction failed.", error);
+        sendExtractionError({
+          type: "EXTRACTION_ERROR",
+          code: "EXTRACTION_FAILED",
+          message: "La page n'a pas pu être extraite.",
+        });
+      }
     });
   },
 });

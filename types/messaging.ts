@@ -1,5 +1,12 @@
-import type { ExtractionPayload } from "./extraction";
+import type {
+  ExtractionErrorMessage,
+  ExtractionPayload,
+  ExtractionResultForPanelMessage,
+  ExtractionResultMessage,
+  StartExtractionMessage,
+} from "./extraction";
 import type { AnalysisDomain } from "./common";
+import type { AnalysisResponse } from "./analysis";
 
 export interface AnalyzePayload {
   url: string;
@@ -12,13 +19,14 @@ export interface AnalyzeScamMessage { type: "ANALYZE_SCAM"; payload: AnalyzePayl
 export interface AnalyzeToxicityMessage { type: "ANALYZE_TOXICITY"; payload: AnalyzePayload; }
 export interface AnalyzeRabbitHolePayload { url: string; contents: Array<{ id: string; title?: string; text: string; timestamp?: string; recommendedFrom?: string; }>; }
 export interface AnalyzeRabbitHoleMessage { type: "ANALYZE_RABBIT_HOLE"; payload: AnalyzeRabbitHolePayload; }
-export interface AnalysisResultMessage { type: "ANALYSIS_RESULT"; domain: AnalysisDomain; payload: Record<string, unknown>; }
+export interface AnalysisResultMessage { type: "ANALYSIS_RESULT"; payload: AnalysisResponse; }
 export interface AnalysisErrorMessage { type: "ANALYSIS_ERROR"; domain?: AnalysisDomain; message: string; errorCode: string; }
 
 export type SafePlaceMessage =
-  | { type: "START_EXTRACTION" }
-  | { type: "EXTRACTION_RESULT"; payload: ExtractionPayload }
-  | { type: "EXTRACTION_RESULT_FOR_PANEL"; payload: ExtractionPayload }
+  | StartExtractionMessage
+  | ExtractionResultMessage
+  | ExtractionResultForPanelMessage
+  | ExtractionErrorMessage
   | AnalyzeFakeNewsMessage
   | AnalyzeScamMessage
   | AnalyzeToxicityMessage

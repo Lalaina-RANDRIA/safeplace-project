@@ -3,15 +3,25 @@ import Header from "./components/Header";
 import Body from "./components/Body";
 import Footer from "./components/Footer";
 import type { ExtractionResultForPanelMessage } from "../../types/extraction";
+import type { ExtractionErrorMessage } from "../../types/extraction";
 import type { Screen } from "../../types/navigation";
+import type { AnalysisResultMessage } from "../../types/messaging";
 
 function App() {
   const [screen, setScreen] = useState<Screen>({ status: "idle" });
 
   useEffect(() => {
-    const handleMessage = (message: ExtractionResultForPanelMessage) => {
+    const handleMessage = (message: ExtractionResultForPanelMessage | ExtractionErrorMessage | AnalysisResultMessage) => {
       if (message.type === "EXTRACTION_RESULT_FOR_PANEL") {
         setScreen({ status: "result", data: message.payload });
+      } else if (message.type === "ANALYSIS_RESULT") {
+        setScreen((currentScreen) =>
+          currentScreen.status === "result"
+            ? { status: "result", data: currentScreen.data, analysis: message.payload }
+            : currentScreen,
+        );
+      } else if (message.type === "EXTRACTION_ERROR") {
+        setScreen({ status: "error", message: message.message });
       }
     };
 
@@ -23,13 +33,9 @@ function App() {
     setScreen({ status: "loading" });
 
     try {
-      const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
-      if (!activeTab?.id) {
-        throw new Error("Aucun onglet actif.");
-      }
-
-      await browser.tabs.sendMessage(activeTab.id, { type: "START_EXTRACTION" });
+      await browser.runtime.sendMessage({ type: "START_EXTRACTION" });
     } catch (reason) {
+      console.error("[SafePlace][SidePanel] Failed to request extraction.", reason);
       setScreen({
         status: "error",
         message: reason instanceof Error ? reason.message : "Impossible d'extraire cette page.",

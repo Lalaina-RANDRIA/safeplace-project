@@ -251,6 +251,27 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
               </div>
             </div>
 
+            {screen.analysis && (
+              <div className="space-y-2 pb-3 border-b border-hairline">
+                <span className="text-[10.5px] font-semibold text-ink">Analyses backend</span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    ["Désinformation", screen.analysis.fakeNews],
+                    ["Arnaque", screen.analysis.scams],
+                    ["Toxicité", screen.analysis.toxicity],
+                    ["Rabbit Hole", screen.analysis.rabbitHole],
+                  ] as const).map(([label, result]) => (
+                    <div key={label} className="flex items-center justify-between bg-paper border border-hairline rounded-sm px-2 py-1.5">
+                      <span className="text-[10.5px] text-ink">{label}</span>
+                      <span className={`text-[10px] font-semibold ${result.status === "success" ? "text-brand-green" : "text-danger-red"}`}>
+                        {result.status === "success" ? "OK" : "Erreur"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Texte extrait */}
             {screen.data.text && (
               <div className="space-y-1.5">

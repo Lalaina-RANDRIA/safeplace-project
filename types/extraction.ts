@@ -27,7 +27,21 @@ export interface ExtractionResultForPanelMessage {
   payload: ExtractionPayload;
 }
 
+export type ExtractionErrorCode =
+  | 'NO_ACTIVE_TAB'
+  | 'UNSUPPORTED_PAGE'
+  | 'CONTENT_SCRIPT_UNAVAILABLE'
+  | 'EXTRACTION_FAILED'
+  | 'INVALID_EXTRACTION_RESULT';
+
+export interface ExtractionErrorMessage {
+  type: 'EXTRACTION_ERROR';
+  code: ExtractionErrorCode;
+  message: string;
+}
+
 export type ExtensionMessage =
   | StartExtractionMessage
   | ExtractionResultMessage
-  | ExtractionResultForPanelMessage;
+  | ExtractionResultForPanelMessage
+  | ExtractionErrorMessage;

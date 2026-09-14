@@ -4,6 +4,9 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest:{
-    permissions: ["sidePanel", "activeTab"]
+    permissions: ["sidePanel", "activeTab"],
+    action: {
+      default_title: "SafePlace",
+    },
   }
 });
