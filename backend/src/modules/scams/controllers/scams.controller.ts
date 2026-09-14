@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { loggerService } from "../../../shared/services/logger.service.ts";
 import { parseHttpUrl } from "../../../shared/utils/url.util.ts";
 import { scamService } from "../services/scam.service.ts";
+import { InvalidScamUrlError } from "../services/scam-url.service.ts";
 
 const MAX_CONTENT_LENGTH = 100_000;
 const MAX_TITLE_LENGTH = 1_000;
@@ -23,7 +24,7 @@ export class ScamsController {
     }
 
     if (typeof body.url !== "string" || !parseHttpUrl(body.url)) {
-      res.status(400).json({ success: false, message: "URL invalide.", errorCode: "INVALID_URL" });
+      res.status(400).json({ success: false, message: "L'URL fournie est invalide.", errorCode: "INVALID_URL" });
       return;
     }
 
@@ -60,6 +61,15 @@ export class ScamsController {
       loggerService.info("[SCAMS] analyze:success");
       res.status(200).json({ success: true, data: result });
     } catch (error) {
+      if (error instanceof InvalidScamUrlError) {
+        res.status(400).json({
+          success: false,
+          message: "L'URL fournie est invalide.",
+          errorCode: "INVALID_URL",
+        });
+        return;
+      }
+
       loggerService.error("[SCAMS] analyze:error", error instanceof Error ? error.message : "unknown error");
       res.status(500).json({ success: false, message: "Analyse scam indisponible.", errorCode: "SCAM_ANALYSIS_FAILED" });
     }

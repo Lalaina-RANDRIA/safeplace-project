@@ -3,7 +3,7 @@ import { ScamContentService } from "./services/scam-content.service.ts";
 import { ScamIdentityService } from "./services/scam-identity.service.ts";
 import { ScamPatternService } from "./services/scam-pattern.service.ts";
 import { ScamScoringService } from "./services/scam-scoring.service.ts";
-import { ScamUrlService } from "./services/scam-url.service.ts";
+import { InvalidScamUrlError, ScamUrlService } from "./services/scam-url.service.ts";
 import { parseHttpUrl } from "../../shared/utils/url.util.ts";
 
 const contentService = new ScamContentService();
@@ -118,8 +118,17 @@ assert.ok(nestedEncodingUrl.signals.some((signal) => signal.description.includes
 const normalEncodingUrl = urlService.analyze("https://example.com/search?q=hello%20world");
 assert.equal(normalEncodingUrl.signals.length, 0);
 
-const invalidUrl = urlService.analyze("not-a-valid-url");
-assert.deepEqual(invalidUrl, { score: 0, signals: [], domain: "" });
+for (const invalidUrl of [
+  "ceci-n-est-pas-une-url",
+  "ftp://example.com",
+  "file:///tmp/test",
+  "javascript:alert(1)",
+]) {
+  assert.throws(
+    () => urlService.analyze(invalidUrl),
+    (error: unknown) => error instanceof InvalidScamUrlError,
+  );
+}
 
 for (const analysis of [
   httpUrl,

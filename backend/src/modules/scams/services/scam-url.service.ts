@@ -5,6 +5,13 @@ import {
 
 import type { ScamSignal, ScamUrlAnalysis } from "../types/scam.ts";
 
+export class InvalidScamUrlError extends Error {
+  constructor(message = "URL invalide.") {
+    super(message);
+    this.name = "InvalidScamUrlError";
+  }
+}
+
 /**
  * Adresse IPv4 simple.
  *
@@ -437,11 +444,7 @@ export class ScamUrlService {
      * pas de la détection Scam.
      */
     if (!parsed) {
-      return {
-        score: 0,
-        signals: [],
-        domain: "",
-      };
+      throw new InvalidScamUrlError();
     }
 
     const signals: ScamSignal[] = [];
