@@ -336,6 +336,25 @@ function containsEmbeddedUrl(value: string): boolean {
 }
 
 /**
+ * Détecte un encodage imbriqué sans pénaliser l'encodage URL normal.
+ */
+function containsNestedEncoding(value: string): boolean {
+  if (!/%[0-9a-f]{2}/i.test(value)) {
+    return false;
+  }
+
+  try {
+    const decodedValue = decodeURIComponent(value);
+    return (
+      decodedValue !== value &&
+      (/%[0-9a-f]{2}/i.test(decodedValue) || /^https?:\/\//i.test(decodedValue))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Détecte des termes génériques pouvant donner une apparence
  * de connexion, vérification ou support à un domaine.
  *
@@ -655,7 +674,29 @@ export class ScamUrlService {
 
     /**
      * ============================================================
-     * 12. Termes génériques dans le domaine
+     * 12. Encodage imbriqué
+     * ============================================================
+     */
+
+    const nestedEncodedParameters = [...parsed.searchParams.entries()]
+      .filter(([, value]) => containsNestedEncoding(value))
+      .map(([key]) => key);
+
+    if (nestedEncodedParameters.length > 0) {
+      signals.push(
+        createSignal(
+          "SUSPICIOUS_LINK",
+          "Un paramètre contient plusieurs niveaux d'encodage URL.",
+          nestedEncodedParameters.join(", "),
+          0.25,
+          0.5,
+        ),
+      );
+    }
+
+    /**
+     * ============================================================
+     * 13. Termes génériques dans le domaine
      * ============================================================
      *
      * Ce signal est volontairement faible.

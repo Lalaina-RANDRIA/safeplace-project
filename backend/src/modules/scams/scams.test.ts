@@ -82,6 +82,57 @@ const punycodeUrl = urlService.analyze("https://xn--pple-43d.example/login");
 assert.ok(punycodeUrl.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
 assert.ok(punycodeUrl.score < 0.85);
 
+const httpUrl = urlService.analyze("http://example.com/");
+assert.equal(httpUrl.domain, "example.com");
+assert.ok(httpUrl.score < 0.85);
+
+const publicIpUrl = urlService.analyze("http://8.8.8.8/login");
+assert.ok(publicIpUrl.signals.some((signal) => signal.type === "SUSPICIOUS_LINK"));
+assert.ok(publicIpUrl.score < 0.85);
+
+const longUrl = urlService.analyze(`https://example.com/${"a".repeat(200)}`);
+assert.ok(longUrl.signals.some((signal) => signal.description.includes("exceptionnellement longue")));
+
+const longHostnameUrl = urlService.analyze(`https://${"a".repeat(85)}.example.com/`);
+assert.ok(longHostnameUrl.signals.some((signal) => signal.description.includes("nom d'hôte")));
+
+const manySubdomainsUrl = urlService.analyze("https://login.verify.account.security.example.com/");
+assert.ok(manySubdomainsUrl.signals.some((signal) => signal.description.includes("sous-domaines")));
+
+const unusualPortUrl = urlService.analyze("https://example.com:4444/login");
+assert.ok(unusualPortUrl.signals.some((signal) => signal.description.includes("port")));
+assert.ok(unusualPortUrl.score < 0.85);
+
+const credentialsUrl = urlService.analyze("https://user:password@example.com/");
+assert.ok(credentialsUrl.signals.some((signal) => signal.description.includes("identifiants intégrés")));
+
+const suspiciousParameterUrl = urlService.analyze("https://example.com/login?redirect=/dashboard");
+assert.ok(suspiciousParameterUrl.signals.some((signal) => signal.description.includes("paramètres")));
+
+const embeddedRedirectUrl = urlService.analyze("https://example.com/?redirect=https%3A%2F%2Fother.example");
+assert.ok(embeddedRedirectUrl.signals.some((signal) => signal.description.includes("destination HTTP/HTTPS")));
+
+const nestedEncodingUrl = urlService.analyze("https://example.com/?redirect=https%253A%252F%252Fother.example");
+assert.ok(nestedEncodingUrl.signals.some((signal) => signal.description.includes("encodage URL")));
+
+const normalEncodingUrl = urlService.analyze("https://example.com/search?q=hello%20world");
+assert.equal(normalEncodingUrl.signals.length, 0);
+
+const invalidUrl = urlService.analyze("not-a-valid-url");
+assert.deepEqual(invalidUrl, { score: 0, signals: [], domain: "" });
+
+for (const analysis of [
+  httpUrl,
+  publicIpUrl,
+  punycodeUrl,
+  unusualPortUrl,
+  suspiciousParameterUrl,
+]) {
+  assert.ok(analysis.score >= 0 && analysis.score <= 1);
+  assert.ok(analysis.signals.every((signal) => signal.score >= 0 && signal.score <= 1));
+  assert.ok(analysis.signals.every((signal) => signal.confidence >= 0 && signal.confidence <= 1));
+}
+
 const insufficient = scoringService.calculate({
   urlScore: 0,
   contentScore: 0,
