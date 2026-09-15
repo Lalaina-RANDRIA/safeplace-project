@@ -136,11 +136,14 @@ export class FactCheckService {
       const requestUrl = this.config.apiUrl + "?" + parameters.toString();
 
       /*
-       * Appel HTTP vers l'API.
-       *
-       * Node.js récent fournit fetch nativement.
+       * Appel HTTP vers l'API avec timeout.
        */
-      const response = await fetch(requestUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      const response = await fetch(requestUrl, { signal: controller.signal });
+
+      clearTimeout(timeoutId);
 
       /*
        * Gestion des erreurs HTTP.
@@ -171,7 +174,11 @@ export class FactCheckService {
        * empêcher l'ensemble de SafePlace
        * de produire un résultat.
        */
-      console.error("Erreur lors de la recherche des fact-checks:", error);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        console.warn("Timeout lors de la recherche fact-check (10s)");
+      } else {
+        console.error("Erreur lors de la recherche des fact-checks:", error);
+      }
 
       return [];
     }
@@ -203,6 +210,16 @@ export class FactCheckService {
        * sans revue associée.
        */
       if (!claim.claimReview || claim.claimReview.length === 0) {
+        continue;
+      }
+
+      /*
+       * Vérifier la similarité entre le claim recherché et le claim retourné
+       * pour éviter les faux positifs (fact-check sur un claim différent)
+       */
+      const similarity = this.calculateRelevance(claim.text, searchedClaim);
+      if (similarity < 0.3) {
+        // Seuil de similarité minimum pour considérer le fact-check comme pertinent
         continue;
       }
 
@@ -244,7 +261,7 @@ export class FactCheckService {
          * Construction de la preuve.
          */
         const item: Evidence = {
-          id: this.generateEvidenceId(),
+          id: this.generateEvidenceId(review.url),
 
           title: review.title || "Fact-check disponible",
 
@@ -509,13 +526,13 @@ export class FactCheckService {
    * Génère un identifiant unique
    * pour une preuve.
    */
-  private generateEvidenceId(): string {
-    return (
-      "evidence-" +
-      Date.now().toString(36) +
-      "-" +
-      Math.random().toString(36).substring(2, 8)
-    );
+  private generateEvidenceId(url: string): string {
+    let hash = 0;
+    for (let index = 0; index < url.length; index++) {
+      hash = ((hash << 5) - hash) + url.charCodeAt(index);
+      hash |= 0;
+    }
+    return "evidence-" + Math.abs(hash).toString(36);
   }
 }
 

@@ -5,8 +5,24 @@ import type {
   PageAnalysisInput,
 } from "../../types/analysis";
 
+const SAFEPLACE_DEBUG = true;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const API_TIMEOUT_MS = 15_000;
+
+function createAnalysisId(): string {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  return `SP-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function debugLog(step: string, analysisId: string, message: string, detail?: Record<string, unknown>): void {
+  if (!SAFEPLACE_DEBUG) return;
+  const base = `[SafePlace][Background][${step}][${analysisId}] ${message}`;
+  if (detail && Object.keys(detail).length > 0) {
+    console.log(base, detail);
+    return;
+  }
+  console.log(base);
+}
 
 type ApiResponse<T> = {
   success: true;
@@ -78,16 +94,56 @@ async function captureResult(
   }
 }
 
-export async function analyzePage(input: PageAnalysisInput): Promise<AnalysisResponse> {
+export async function analyzePage(input: PageAnalysisInput, analysisId: string = createAnalysisId()): Promise<AnalysisResponse> {
+  debugLog("BACKEND", analysisId, "4 modules lancés en parallèle");
+  const startedAt = performance.now();
+
   const [fakeNews, scams, toxicity, rabbitHole] = await Promise.all([
-    captureResult(() => postAnalysis<Record<string, unknown>>("/api/fake-news/analyze", toPayload(input))),
-    captureResult(() => postAnalysis<Record<string, unknown>>("/api/scams/analyze", toPayload(input))),
-    captureResult(() => postAnalysis<Record<string, unknown>>("/api/toxicity/analyze", toPayload(input))),
-    captureResult(() => postAnalysis<Record<string, unknown>>("/api/rabbit-hole/analyze", {
-      url: input.url,
-      contents: [{ id: `${input.url}-${input.extractedAt}`, title: input.title, text: input.content }],
-    })),
+    captureResult(() => {
+      debugLog("FAKE_NEWS", analysisId, "Requête envoyée");
+      const started = performance.now();
+      return postAnalysis<Record<string, unknown>>("/api/fake-news/analyze", toPayload(input)).then((result) => {
+        debugLog("FAKE_NEWS", analysisId, "Réponse reçue", { durationMs: Math.round(performance.now() - started), resultStatus: result ? "ok" : "empty" });
+        return result;
+      });
+    }),
+    captureResult(() => {
+      debugLog("SCAMS", analysisId, "Requête envoyée");
+      const started = performance.now();
+      return postAnalysis<Record<string, unknown>>("/api/scams/analyze", toPayload(input)).then((result) => {
+        debugLog("SCAMS", analysisId, "Réponse reçue", { durationMs: Math.round(performance.now() - started), resultStatus: result ? "ok" : "empty" });
+        return result;
+      });
+    }),
+    captureResult(() => {
+      debugLog("TOXICITY", analysisId, "Requête envoyée");
+      const started = performance.now();
+      return postAnalysis<Record<string, unknown>>("/api/toxicity/analyze", toPayload(input)).then((result) => {
+        debugLog("TOXICITY", analysisId, "Réponse reçue", { durationMs: Math.round(performance.now() - started), resultStatus: result ? "ok" : "empty" });
+        return result;
+      });
+    }),
+    captureResult(() => {
+      debugLog("RABBIT_HOLE", analysisId, "Requête envoyée");
+      const started = performance.now();
+      return postAnalysis<Record<string, unknown>>("/api/rabbit-hole/analyze", {
+        url: input.url,
+        contents: [{ id: `${input.url}-${input.extractedAt}`, title: input.title, text: input.content }],
+      }).then((result) => {
+        debugLog("RABBIT_HOLE", analysisId, "Réponse reçue", { durationMs: Math.round(performance.now() - started), resultStatus: result ? "ok" : "empty" });
+        return result;
+      });
+    }),
   ]);
+
+  const totalDurationMs = Math.round(performance.now() - startedAt);
+  debugLog("END", analysisId, "Analyse terminée", {
+    totalDurationMs,
+    fakeNews: fakeNews.status,
+    scams: scams.status,
+    toxicity: toxicity.status,
+    rabbitHole: rabbitHole.status,
+  });
 
   return { fakeNews, scams, toxicity, rabbitHole };
 }

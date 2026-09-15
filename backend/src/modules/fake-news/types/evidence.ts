@@ -105,6 +105,15 @@ export interface Evidence {
      * Valeur comprise entre 0 et 1.
      */
     confidenceScore: number;
+
+    /** Score de crédibilité estimé séparément de la pertinence. */
+    credibilityScore?: number;
+
+    /** Niveau de crédibilité estimé de la source. */
+    credibilityLevel?: "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+
+    /** Raisons lisibles de l'estimation de crédibilité. */
+    credibilityReasons?: string[];
 }
 
 

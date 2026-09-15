@@ -11,6 +11,10 @@ import { factcheckService } from "./factcheck.service";
 import { verificationService } from "./verification.service";
 
 import { scoringService } from "./scoring.service";
+import { queryService } from "./query.service";
+import { credibilityService } from "./credibility.service";
+import { synthesisService } from "./synthesis.service";
+import { DEFAULT_AGENTIC_LIMITS } from "../types/provider";
 
 /**
  * Données nécessaires pour analyser une page.
@@ -45,7 +49,8 @@ export class AnalysisService {
      *
      * devient une affirmation vérifiable.
      */
-    const claims: Claim[] = await claimService.extractClaims(input.content);
+    const extractedClaims: Claim[] = await claimService.extractClaims(input.content);
+    const claims: Claim[] = extractedClaims.slice(0, DEFAULT_AGENTIC_LIMITS.maxClaims);
 
     /*
      * ============================================================
@@ -58,11 +63,24 @@ export class AnalysisService {
     const searchResults: Map<string, Evidence[]> = new Map();
 
     for (const claim of claims) {
-      const evidence: Evidence[] = await searchService.searchEvidence(
-        claim.text,
-      );
+      const queries = queryService
+        .generate(claim)
+        .slice(0, DEFAULT_AGENTIC_LIMITS.maxQueriesPerClaim);
+      const evidenceGroups: Evidence[][] = [];
 
-      searchResults.set(claim.text, evidence);
+      for (const query of queries) {
+        try {
+          const evidence = await searchService.searchEvidence(query.text, {
+            maxResults: DEFAULT_AGENTIC_LIMITS.maxSearchResultsPerQuery,
+          });
+          evidenceGroups.push(evidence);
+        } catch (error) {
+          console.error("[FAKE_NEWS] Search provider failed:", error);
+        }
+      }
+
+      const mergedEvidence = evidenceGroups.flat();
+      searchResults.set(claim.text, credibilityService.evaluateAll(mergedEvidence));
     }
 
     /*
@@ -76,11 +94,20 @@ export class AnalysisService {
     const factCheckResults: Map<string, Evidence[]> = new Map();
 
     for (const claim of claims) {
-      const factChecks: Evidence[] = await factcheckService.searchFactChecks(
-        claim.text,
-      );
+      let factChecks: Evidence[] = [];
+      try {
+        factChecks = await factcheckService.searchFactChecks(claim.text);
+      } catch (error) {
+        console.error("[FAKE_NEWS] Fact-check provider failed:", error);
+      }
 
       factCheckResults.set(claim.text, factChecks);
+
+      // Le LLM est optionnel; VerificationService conserve l'autorité finale.
+      await synthesisService.synthesize(
+        claim,
+        [...(searchResults.get(claim.text) ?? []), ...factChecks],
+      );
     }
 
     /*

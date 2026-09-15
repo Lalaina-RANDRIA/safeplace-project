@@ -67,6 +67,13 @@ export class ClaimService {
       }
 
       /*
+       * Filtrer les contenus non factuels (questions, opinions, instructions, etc.)
+       */
+      if (this.isNonFactual(sentence)) {
+        continue;
+      }
+
+      /*
        * Calcul d'un score d'importance.
        */
       const importance = this.calculateImportance(sentence);
@@ -75,28 +82,37 @@ export class ClaimService {
        * Création de l'affirmation.
        */
       const claim: Claim = {
-        id: this.generateClaimId(),
+        id: this.generateClaimId(sentence),
 
         text: sentence,
 
         importance: importance,
 
         checkable: true,
+
+        language: this.detectLanguage(sentence),
+
+        confidence: 0.75,
       };
 
       claims.push(claim);
     }
 
     /*
+     * Déduplication des claims (même texte = même claim)
+     */
+    const uniqueClaims = this.deduplicateClaims(claims);
+
+    /*
      * Tri des affirmations :
      * les plus importantes apparaissent en premier.
      */
-    claims.sort(
+    uniqueClaims.sort(
       (premiereAffirmation, deuxiemeAffirmation) =>
         deuxiemeAffirmation.importance - premiereAffirmation.importance,
     );
 
-    return claims;
+    return uniqueClaims;
   }
 
   /**
@@ -251,16 +267,86 @@ export class ClaimService {
   }
 
   /**
-   * Génère un identifiant unique
-   * pour une affirmation.
+   * Génère un identifiant unique et déterministe
+   * pour une affirmation basé sur son contenu.
    */
-  private generateClaimId(): string {
-    return (
-      "claim-" +
-      Date.now().toString(36) +
-      "-" +
-      Math.random().toString(36).substring(2, 8)
-    );
+  private generateClaimId(text: string): string {
+    // Hash simple et déterministe basé sur le contenu
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return "claim-" + Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Détecte si une phrase est du contenu non factuel
+   * (questions, opinions, instructions, titres, émotionnel, etc.)
+   */
+  private isNonFactual(sentence: string): boolean {
+    const trimmed = sentence.trim().toLowerCase();
+
+    // Questions
+    if (trimmed.endsWith("?") || /^(?:est-ce que|qu'est-ce que|qui|quoi|où|quand|comment|pourquoi|êtes-vous|êtes vous|pensez-vous|croyez-vous)/i.test(sentence)) {
+      return true;
+    }
+
+    // Opinions subjectives
+    if (/^(?:je pense|je crois|à mon avis|selon moi|i think|i believe|in my opinion|à mon sens|personnellement)/i.test(sentence)) {
+      return true;
+    }
+
+    // Instructions / Appels à l'action
+    if (/^(?:partagez|cliquez|abonnez-vous|inscrivez-vous|achetez|acheter|téléchargez|suivez|likez|commentez|regardez|écoutez|lisez|découvrez|visitez|contactez|appelez|envoyez)\b/i.test(sentence)) {
+      return true;
+    }
+
+    // Titres seuls (très courts, sans verbe principal)
+    if (sentence.split(/\s+/).length < 5 && !/[.!?]$/.test(sentence.trim())) {
+      return true;
+    }
+
+    // Phrases purement émotionnelles / exclamations
+    if (/^(?:incroyable|wow|génial|super|formidable|terrible|horrible|choquant|scandaleux|extraordinaire|fantastique|magnifique|merveilleux|affreux|épouvantable)\b/i.test(sentence) || /\b(?:est|semble|is|seems)\s+(?:incroyable|génial|super|formidable|terrible|horrible|choquant|scandaleux|extraordinaire|fantastique|magnifique|merveilleux|affreux|épouvantable)\b/i.test(sentence)) {
+      return true;
+    }
+
+    // Commentaires génériques / métadonnées
+    if (/^(?:lire la suite|voir plus|suite de l'article|publié le|mis à jour|source :|via |partager|tweet|retweet|like|commentaire)/i.test(sentence)) {
+      return true;
+    }
+
+    // Citations sans affirmation propre
+    if (/^["«].*["»]$/.test(sentence.trim()) && sentence.split(/\s+/).length < 15) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Déduplique les claims basés sur leur texte normalisé
+   */
+  private deduplicateClaims(claims: Claim[]): Claim[] {
+    const seen = new Set<string>();
+    return claims.filter(claim => {
+      const normalized = claim.text.toLowerCase().trim();
+      if (seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    });
+  }
+
+  private detectLanguage(text: string): "fr" | "mg" | "en" | "unknown" {
+    const normalized = text.toLowerCase();
+    if (/\b(the|is|are|was|were|according|study|people)\b/.test(normalized)) return "en";
+    if (/\b(ary|amin|izay|dia|ny|ho|amin'ny)\b/.test(normalized)) return "mg";
+    if (/\b(le|la|les|est|sont|selon|étude|personnes)\b/.test(normalized)) return "fr";
+    return "unknown";
   }
 }
 

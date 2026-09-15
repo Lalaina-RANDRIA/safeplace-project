@@ -111,6 +111,12 @@ export interface Claim {
      * à partir de sources externes.
      */
     checkable: boolean;
+
+    /** Langue détectée ou estimée du claim. */
+    language?: "fr" | "mg" | "en" | "unknown";
+
+    /** Confiance de l'extraction heuristique ou LLM. */
+    confidence?: number;
 }
 
 

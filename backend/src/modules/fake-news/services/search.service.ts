@@ -41,7 +41,6 @@ interface SearchApiResponse {
     totalResults?: string;
   };
 }
-
 /**
  * Paramètres supplémentaires pour une recherche.
  */
@@ -150,17 +149,21 @@ export class SearchService {
       const url = this.buildRequestUrl(searchQuery, options);
 
       /*
-       * Appel de l'API.
+       * Appel de l'API avec timeout.
        */
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
       const response = await fetch(url, {
         method: "GET",
-
+        signal: controller.signal,
         headers: {
           "X-Goog-Api-Key": this.config.apiKey,
-
           Accept: "application/json",
         },
       });
+
+      clearTimeout(timeoutId);
 
       /*
        * Vérification de la réponse HTTP.
@@ -190,7 +193,11 @@ export class SearchService {
        * Une erreur du moteur de recherche
        * ne doit pas faire planter toute l'analyse.
        */
-      console.error("Erreur lors de la recherche Web :", error);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        console.warn("Timeout lors de la recherche Web (10s)");
+      } else {
+        console.error("Erreur lors de la recherche Web :", error);
+      }
 
       return [];
     }
@@ -373,7 +380,7 @@ export class SearchService {
        * Création de la preuve.
        */
       const item: Evidence = {
-        id: this.generateEvidenceId(),
+        id: this.generateEvidenceId(url),
 
         title: result.title || "Résultat de recherche",
 
@@ -408,7 +415,31 @@ export class SearchService {
         deuxiemePreuve.relevanceScore - premierePreuve.relevanceScore,
     );
 
-    return evidence;
+    /*
+     * Déduplication par domaine : on garde seulement le résultat le plus pertinent par domaine
+     */
+    const uniqueByDomain = this.deduplicateByDomain(evidence);
+
+    return uniqueByDomain;
+  }
+
+  /**
+   * Déduplique les preuves par domaine (garde le plus pertinent par domaine)
+   */
+  private deduplicateByDomain(evidence: Evidence[]): Evidence[] {
+    const seenDomains = new Set<string>();
+    return evidence.filter(item => {
+      try {
+        const domain = new URL(item.url).hostname;
+        if (seenDomains.has(domain)) {
+          return false;
+        }
+        seenDomains.add(domain);
+        return true;
+      } catch {
+        return true; // Garde si URL invalide
+      }
+    });
   }
 
   /**
@@ -610,13 +641,17 @@ export class SearchService {
   /**
    * Génère un identifiant unique.
    */
-  private generateEvidenceId(): string {
-    return (
-      "search-evidence-" +
-      Date.now().toString(36) +
-      "-" +
-      Math.random().toString(36).substring(2, 8)
-    );
+  private generateEvidenceId(url: string): string {
+    return "search-evidence-" + this.hashText(url);
+  }
+
+  private hashText(value: string): string {
+    let hash = 0;
+    for (let index = 0; index < value.length; index++) {
+      hash = ((hash << 5) - hash) + value.charCodeAt(index);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
   }
 }
 

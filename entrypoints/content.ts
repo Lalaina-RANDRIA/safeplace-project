@@ -7,6 +7,22 @@ import type {
 import type { ExtractionErrorMessage } from "../types/extraction";
 
 const MIN_READABILITY_TEXT_LENGTH = 200;
+const SAFEPLACE_DEBUG = true;
+
+function createAnalysisId(): string {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  return `SP-${stamp}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function debugLog(step: string, analysisId: string, message: string, detail?: Record<string, unknown>): void {
+  if (!SAFEPLACE_DEBUG) return;
+  const base = `[SafePlace][Content][${step}][${analysisId}] ${message}`;
+  if (detail && Object.keys(detail).length > 0) {
+    console.log(base, detail);
+    return;
+  }
+  console.log(base);
+}
 
 const PLATFORM_SELECTORS: Record<string, string[]> = {
   "facebook.com": ['[role="main"]', '[data-pagelet="FeedUnit_0"]'],
@@ -134,17 +150,48 @@ function sendExtractionError(error: ExtractionErrorMessage): void {
 export default defineContentScript({
   matches: ["<all_urls>"],
   main() {
+    const localAnalysisId = createAnalysisId();
+    debugLog("LISTENER", localAnalysisId, "Listener installé");
+
     browser.runtime.onMessage.addListener((message: unknown) => {
       if (!isStartExtractionMessage(message)) {
         return;
       }
 
+      const analysisId = typeof message === "object" && message && "debugAnalysisId" in message && typeof (message as { debugAnalysisId?: string }).debugAnalysisId === "string"
+        ? (message as { debugAnalysisId: string }).debugAnalysisId
+        : "unknown";
+      debugLog("CONTENT", analysisId, "START_EXTRACTION reçu");
+
       try {
+        const startedAt = performance.now();
         const payload = extractPage();
-        void browser.runtime.sendMessage({ type: "EXTRACTION_RESULT", payload }).catch((reason) => {
+        const durationMs = Math.round(performance.now() - startedAt);
+        debugLog("EXTRACTION", analysisId, "Extraction terminée", {
+          extractionMethod: payload.extractionMethod,
+          titleLength: payload.title.length,
+          textLength: payload.text.length,
+          linkCount: payload.links.length,
+          durationMs,
+        });
+
+        void browser.runtime.sendMessage({ type: "EXTRACTION_RESULT", payload, debugAnalysisId: analysisId }).then(() => {
+          debugLog("CONTENT", analysisId, "EXTRACTION_RESULT envoyé avec succès");
+        }).catch((reason) => {
+          debugLog("ERROR", analysisId, "Échec sendMessage", {
+            step: "CONTENT",
+            errorName: reason instanceof Error ? reason.name : "UnknownError",
+            errorMessage: reason instanceof Error ? reason.message : String(reason ?? ""),
+          });
           console.error("[SafePlace][Content] Failed to send extraction result.", reason);
         });
       } catch (error) {
+        const messageText = error instanceof Error ? error.message : String(error ?? "");
+        debugLog("ERROR", analysisId, "Extraction failed", {
+          step: "CONTENT",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          errorMessage: messageText,
+        });
         console.error("[SafePlace][Content] Extraction failed.", error);
         sendExtractionError({
           type: "EXTRACTION_ERROR",

@@ -1,6 +1,13 @@
 import React from "react";
 import logoSafeplace from "../../../assets/logo_safeplace.png";
 import type { Screen } from "../../../types/navigation";
+import ResultScreen from "./ResultScreen";
+import AnalyzingState from "./states/AnalyzingState";
+import ErrorState from "./states/ErrorState";
+import ExtractionState from "./states/ExtractionState";
+import InsufficientContextState from "./states/InsufficientContextState";
+import PartialResultState from "./states/PartialResultState";
+import UnsupportedPageState from "./states/UnsupportedPageState";
 
 interface BodyProps {
   onAnalyze: () => Promise<void>;
@@ -9,10 +16,10 @@ interface BodyProps {
 }
 
 export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
-  const showHome = screen.status === "idle";
-  const showLoading = screen.status === "loading";
-  const showResult = screen.status === "result";
-  const showError = screen.status === "error";
+  const showHome = screen.status === "idle" || screen.status === "ready";
+  const showLoading = screen.status === "extracting" || screen.status === "analyzing";
+  const showResult = screen.status === "result" || screen.status === "partial_result";
+  const showError = screen.status === "error" || screen.status === "unsupported_page" || screen.status === "insufficient_context";
 
   return (
     <div className="main-content p-3.5 space-y-3.5 text-ink">
@@ -194,24 +201,10 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
       {/* Analysis Loading State */}
       <div
         id="loadingState"
-        className={`${showLoading ? "" : "hidden "}section-wrapper bg-white border border-hairline rounded-sm p-4 text-center shadow-subtle`}
+        className={`${showLoading ? "" : "hidden "}section-wrapper`}
       >
-        <div className="loading-card space-y-3">
-          <div className="loading-spinner flex justify-center py-2">
-            <div className="w-7 h-7 border-2 border-hairline border-t-brand-green rounded-full animate-spin"></div>
-          </div>
-          <div>
-            <p className="loading-text text-[13px] font-semibold text-ink m-0">
-              Analyse en cours...
-            </p>
-            <p className="loading-subtext text-[11px] text-[#5C6661] m-0 mt-0.5">
-              Vérification de l'intégrité du contenu de la page
-            </p>
-          </div>
-          <div className="progress-bar-wrapper w-full bg-paper border border-hairline rounded-full overflow-hidden h-1.5">
-            <div className="progress-bar h-full bg-brand-green animate-pulse w-3/5"></div>
-          </div>
-        </div>
+        {screen.status === "extracting" && <ExtractionState />}
+        {screen.status === "analyzing" && <AnalyzingState result={screen.ui} />}
       </div>
 
       {/* Analysis Results */}
@@ -219,7 +212,7 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
         id="resultsSection"
         className={`${showResult ? "" : "hidden "}section-wrapper bg-white border border-hairline rounded-sm p-3.5 space-y-3.5 shadow-subtle`}
       >
-        {screen.status === "result" && (
+        {(screen.status === "result" || screen.status === "partial_result") && (
           <>
             {/* Métadonnées de la page */}
             <div className="space-y-2 pb-3 border-b border-hairline">
@@ -324,6 +317,11 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
             </button>
           </>
         )}
+        {screen.status === "partial_result" ? (
+          <PartialResultState result={screen.ui} />
+        ) : screen.status === "result" ? (
+          <ResultScreen result={screen.ui} />
+        ) : (
         <div className="risk-section space-y-3">
           {/* Risk Score Header */}
           <div className="risk-score-header pb-3 border-b border-hairline">
@@ -435,6 +433,7 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Action Buttons */}
         <div className="action-buttons grid grid-cols-2 gap-2 pt-1">
@@ -455,19 +454,9 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
         </div>
       </div>
 
-      {showError && (
-        <section className="section-wrapper bg-white border border-hairline rounded-sm p-4 text-center shadow-subtle">
-          <p className="text-[13px] font-semibold text-danger-red">Analyse impossible</p>
-          <p className="text-[11px] text-[#5C6661] mt-1">{screen.message}</p>
-          <button
-            className="mt-3 w-full bg-brand-green text-white py-2 px-4 rounded-sm font-semibold text-[12px]"
-            type="button"
-            onClick={() => void onAnalyze()}
-          >
-            Réessayer
-          </button>
-        </section>
-      )}
+      {showError && screen.status === "error" && <ErrorState onRetry={onAnalyze} />}
+      {showError && screen.status === "unsupported_page" && <UnsupportedPageState />}
+      {showError && screen.status === "insufficient_context" && <InsufficientContextState />}
 
       {/* Recent Scans Section */}
       <section className={`${showHome ? "" : "hidden "}section-wrapper bg-white border border-hairline rounded-sm p-3.5 shadow-subtle space-y-2.5`}>

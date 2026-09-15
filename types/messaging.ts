@@ -19,8 +19,8 @@ export interface AnalyzeScamMessage { type: "ANALYZE_SCAM"; payload: AnalyzePayl
 export interface AnalyzeToxicityMessage { type: "ANALYZE_TOXICITY"; payload: AnalyzePayload; }
 export interface AnalyzeRabbitHolePayload { url: string; contents: Array<{ id: string; title?: string; text: string; timestamp?: string; recommendedFrom?: string; }>; }
 export interface AnalyzeRabbitHoleMessage { type: "ANALYZE_RABBIT_HOLE"; payload: AnalyzeRabbitHolePayload; }
-export interface AnalysisResultMessage { type: "ANALYSIS_RESULT"; payload: AnalysisResponse; }
-export interface AnalysisErrorMessage { type: "ANALYSIS_ERROR"; domain?: AnalysisDomain; message: string; errorCode: string; }
+export interface AnalysisResultMessage { type: "ANALYSIS_RESULT"; payload: AnalysisResponse; debugAnalysisId?: string; }
+export interface AnalysisErrorMessage { type: "ANALYSIS_ERROR"; domain?: AnalysisDomain; message: string; errorCode: string; debugAnalysisId?: string; }
 
 export type SafePlaceMessage =
   | StartExtractionMessage

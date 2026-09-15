@@ -145,6 +145,8 @@ export class VerificationService {
    *
    * Les doublons sont supprimés lorsque plusieurs
    * services retournent exactement la même URL.
+   * Déduplication également par domaine pour éviter
+   * le double comptage de la même source.
    */
   private mergeEvidence(
     searchEvidence: Evidence[],
@@ -153,6 +155,29 @@ export class VerificationService {
     const merged: Evidence[] = [];
 
     const urls = new Set<string>();
+    const domains = new Set<string>();
+
+    /*
+     * Ajout des fact-checks en premier (priorité plus haute).
+     */
+    for (const evidence of factCheckEvidence) {
+      if (urls.has(evidence.url)) {
+        continue;
+      }
+
+      try {
+        const domain = new URL(evidence.url).hostname;
+        if (domains.has(domain)) {
+          continue; // Déjà une preuve de ce domaine
+        }
+        domains.add(domain);
+      } catch {
+        // Ignore si URL invalide
+      }
+
+      urls.add(evidence.url);
+      merged.push(evidence);
+    }
 
     /*
      * Ajout des résultats du moteur de recherche.
@@ -162,21 +187,17 @@ export class VerificationService {
         continue;
       }
 
-      urls.add(evidence.url);
-
-      merged.push(evidence);
-    }
-
-    /*
-     * Ajout des fact-checks.
-     */
-    for (const evidence of factCheckEvidence) {
-      if (urls.has(evidence.url)) {
-        continue;
+      try {
+        const domain = new URL(evidence.url).hostname;
+        if (domains.has(domain)) {
+          continue; // Déjà une preuve de ce domaine (fact-check ou autre recherche)
+        }
+        domains.add(domain);
+      } catch {
+        // Ignore si URL invalide
       }
 
       urls.add(evidence.url);
-
       merged.push(evidence);
     }
 
@@ -278,14 +299,14 @@ export class VerificationService {
     /*
      * Les preuves sont trop faibles.
      */
-    if (evidenceQuality < 0.15) {
+    if (evidenceQuality < 0.2) {
       return "NOT_ENOUGH_INFO";
     }
 
     /*
      * Aucun camp ne domine suffisamment.
      */
-    if (supportScore < 0.2 && refuteScore < 0.2) {
+    if (supportScore < 0.25 && refuteScore < 0.25) {
       return "NOT_ENOUGH_INFO";
     }
 
@@ -298,21 +319,21 @@ export class VerificationService {
      * Résultats trop proches :
      * les preuves sont contradictoires.
      */
-    if (difference < 0.15) {
+    if (difference < 0.2) {
       return "UNCERTAIN";
     }
 
     /*
      * Les preuves favorisent la véracité.
      */
-    if (supportScore > refuteScore && supportScore >= 0.3) {
+    if (supportScore > refuteScore && supportScore >= 0.35) {
       return "SUPPORTED";
     }
 
     /*
      * Les preuves favorisent la réfutation.
      */
-    if (refuteScore > supportScore && refuteScore >= 0.3) {
+    if (refuteScore > supportScore && refuteScore >= 0.35) {
       return "REFUTED";
     }
 

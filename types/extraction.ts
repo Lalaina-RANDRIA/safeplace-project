@@ -15,16 +15,19 @@ export interface ExtractionPayload {
 
 export interface StartExtractionMessage {
   type: 'START_EXTRACTION';
+  debugAnalysisId?: string;
 }
 
 export interface ExtractionResultMessage {
   type: 'EXTRACTION_RESULT';
   payload: ExtractionPayload;
+  debugAnalysisId?: string;
 }
 
 export interface ExtractionResultForPanelMessage {
   type: 'EXTRACTION_RESULT_FOR_PANEL';
   payload: ExtractionPayload;
+  debugAnalysisId?: string;
 }
 
 export type ExtractionErrorCode =
