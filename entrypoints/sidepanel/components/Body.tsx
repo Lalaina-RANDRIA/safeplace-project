@@ -2,6 +2,9 @@ import React from "react";
 import logoSafeplace from "../../../assets/logo_safeplace.png";
 import type { Screen } from "../../../types/navigation";
 import ResultScreen from "./ResultScreen";
+import ExtractedContentView from "./ExtractedContentView";
+import ProtectedContent from "./ProtectedContent";
+import RabbitHoleAlert from "./RabbitHoleAlert";
 import AnalyzingState from "./states/AnalyzingState";
 import ErrorState from "./states/ErrorState";
 import ExtractionState from "./states/ExtractionState";
@@ -265,47 +268,18 @@ export default function Body({ onAnalyze, onBack, screen }: BodyProps) {
               </div>
             )}
 
-            {/* Texte extrait */}
-            {screen.data.text && (
-              <div className="space-y-1.5">
-                <span className="text-[10.5px] font-semibold text-ink">
-                  Texte extrait{" "}
-                  <span className="font-normal text-[#5C6661]">({screen.data.text.length} caractères)</span>
-                </span>
-                <div className="bg-paper border border-hairline rounded-sm p-2.5 max-h-36 overflow-y-auto">
-                  <p className="text-[11px] text-ink leading-relaxed whitespace-pre-wrap m-0">
-                    {screen.data.text}
-                  </p>
-                </div>
-              </div>
-            )}
+            {/* Sensibilisation Rabbit Hole — le contenu reste entièrement visible */}
+            <RabbitHoleAlert modules={screen.ui.modules} />
 
-            {/* Liens extraits */}
-            {screen.data.links.length > 0 && (
-              <div className="space-y-1.5">
-                <span className="text-[10.5px] font-semibold text-ink">
-                  Liens externes{" "}
-                  <span className="font-normal text-[#5C6661]">({screen.data.links.length})</span>
-                </span>
-                <div className="bg-paper border border-hairline rounded-sm p-2.5 max-h-28 overflow-y-auto space-y-1.5">
-                  {screen.data.links.map((link, i) => (
-                    <div key={i} className="flex flex-col gap-0.5">
-                      <a
-                        href={link.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-brand-green underline underline-offset-1 truncate"
-                        title={link.href}
-                      >
-                        {link.text || link.href}
-                      </a>
-                      {link.text && (
-                        <span className="text-[10px] text-[#5C6661] truncate">{link.href}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {/* Contenu analysé — masqué si un risque moyen ou plus est détecté */}
+            {(screen.ui.extractedContent.text.length > 0 ||
+              screen.ui.extractedContent.links.length > 0) && (
+              <ProtectedContent
+                modules={screen.ui.modules}
+                resultKey={`${screen.data.url}|${screen.data.extractedAt}`}
+              >
+                <ExtractedContentView content={screen.ui.extractedContent} />
+              </ProtectedContent>
             )}
 
             <button
